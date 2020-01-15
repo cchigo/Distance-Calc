@@ -19,7 +19,7 @@ class LocationViewModel: ViewModel() {
 
     }
 
-    fun getLocation(context: Context): LiveData<List<Location>> {
+    fun getLocation(context:Context, location: Location): LiveData<List<Location>> {
         return LocationDatabase.getInstance(context).LocationDao().getLocationInfo()
     }
 

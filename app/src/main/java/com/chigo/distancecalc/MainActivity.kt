@@ -5,33 +5,34 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
-import android.util.Log
 import android.view.View
-import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.location.LocationManagerCompat.isLocationEnabled
-import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.ViewModelProviders
 import com.chigo.distancecalc.data.Location
-import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.*
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.LocationSource
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
+import com.google.maps.android.SphericalUtil
 import kotlinx.android.synthetic.main.activity_main.*
-import java.util.jar.Manifest
 
-class MainActivity : AppCompatActivity() {
+
+class MainActivity : AppCompatActivity(), OnMapReadyCallback, View.OnClickListener {
+
+
 
     val PERMISSION_ID = 42
+    private var googleMap: GoogleMap? = null
+    private lateinit var locationViewModel: LocationViewModel
 
 
 
@@ -39,15 +40,15 @@ class MainActivity : AppCompatActivity() {
     lateinit var googleApiClient: GoogleApiClient
     lateinit var mFusedLocationClient: FusedLocationProviderClient
 
-//
-//    private val longitude:Double = 0.0
-//    private val latitude:Double = 0.0
 
-    private val fromLongitude:Double = 0.0
-    private val fromLatitude:Double = 0.0
+    private var longitude:Double = 0.0
+    private var latitude:Double = 0.0
 
-    private val toLongitude:Double = 0.0
-    private val toLatitude:Double = 0.0
+    private var fromLongitude:Double = 0.0
+    private var fromLatitude:Double = 0.0
+
+    private var toLongitude:Double = 0.0
+    private var toLatitude:Double = 0.0
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,14 +66,41 @@ class MainActivity : AppCompatActivity() {
             start.visibility = View.VISIBLE
             it.visibility = View.GONE
 
-            //distance.append(calcDistance().toString())
+            distance_textView.setText("Distance covered is: ${calculateDistance()}")
+
         }
         //initialize fuzed location api
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         getLastLocation()
 
-    }
+        //reference viewmodel
+        locationViewModel = ViewModelProviders.of(this).get(LocationViewModel::class.java)
 
+
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
+
+    }
+    //onCreate Ends here
+
+    //Getting current location
+    private fun getCurrentLocation(): ArrayList<Double> { //Creating a location object
+        val location = LocationServices.FusedLocationApi.getLastLocation(googleApiClient)
+        if (location != null) { //Getting longitude and latitude
+//            longitude = location.longitude
+//            latitude = location.latitude
+            //moving the map to location
+
+            val newLocation = Location(
+                longitude = location.longitude,
+                latitude = location.latitude
+            )
+            locationViewModel.getLocation(newLocation)
+            Toast.makeText(this, "location found", Toast.LENGTH_LONG).show()
+        }
+
+        return arrayListOf(longitude, latitude)
+    }
     @SuppressLint("MissingPermission")
     private fun getLastLocation() {
         if (checkPermissions()) {
@@ -154,6 +182,70 @@ class MainActivity : AppCompatActivity() {
                 // Granted. Start getting the location information
             }
         }
+    }
+
+    override fun onMapReady(googleMap: GoogleMap?) {
+        mMap = googleMap!!
+
+        val latLng = LatLng(-7.5, 4.00)
+        mMap.addMarker(MarkerOptions().position(latLng).draggable(true))
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng))
+  }
+
+//    override fun onMove(googleMap: GoogleMap?){
+//        mFusedLocationClient.lastLocation.addOnCompleteListener(this) {task ->
+//            //                    var location: Location = task.result
+//            var location = task.result
+//            if (location == null) {
+//                requestNewLocationData()
+//            } else {
+//                latitude_textView.text = location.latitude.toString()
+//                longitude_textView.text = location.longitude.toString()
+//            }
+//
+//        }
+//
+//    }
+
+    override fun onClick(v: View?) {
+        if(v == start){
+            fromLongitude = getCurrentLocation()[0]
+            fromLatitude = getCurrentLocation()[1]
+
+
+            Toast.makeText(this,"From set",Toast.LENGTH_SHORT).show()
+
+        }
+        if(v == stop){
+            toLongitude = getCurrentLocation()[0]
+            toLatitude = getCurrentLocation()[1]
+            Toast.makeText(this,"To set",Toast.LENGTH_SHORT).show()
+            calculateDistance()
+        }
+
+        if(v == buttonCalcDistance){
+            //This method will show the distance
+
+            calculateDistance()
+        }
+
+    }
+
+    //calculates the distance between the start and stop cordinates
+    private fun calculateDistance(): Double {
+        //get both coordinates
+        var from = LatLng(fromLatitude, fromLongitude)
+        var to = LatLng(toLatitude, toLongitude)
+
+        //calculate the distance
+        var distance = SphericalUtil.computeDistanceBetween(from, to)
+
+        //display the distance
+       Toast.makeText(this, "$distance Meters",Toast.LENGTH_SHORT).show()
+
+        return distance
+
+
     }
 
 
