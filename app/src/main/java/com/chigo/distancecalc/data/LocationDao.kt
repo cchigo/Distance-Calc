@@ -17,8 +17,4 @@ interface LocationDao {
     @Delete
     fun delete(location: Location)
 
-    @Query("SELECT * FROM location_table")
-    fun deleteAllLocations()
-
-
 }
