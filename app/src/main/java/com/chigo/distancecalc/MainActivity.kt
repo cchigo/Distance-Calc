@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProviders
 import com.android.volley.Request
 import com.android.volley.Response
@@ -41,13 +42,14 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
 
 
     val PERMISSION_ID = 42
-    private var googleMap: GoogleMap? = null
+    var googleMap: GoogleMap ? = null
     private lateinit var locationViewModel: LocationViewModel
+    var startPosition: List<Location> = arrayListOf()
 
 
 
-    lateinit var mMap: GoogleMap
-    lateinit var googleApiClient: GoogleApiClient
+    //lateinit var mMap: GoogleMap
+  //  lateinit var googleApiClient: GoogleApiClient
     lateinit var mFusedLocationClient: FusedLocationProviderClient
 
 
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
 
     private var toLongitude:Double = 0.0
     private var toLatitude:Double = 0.0
+    lateinit var mapFragment: SupportMapFragment
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,32 +70,54 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
 
         //initialize fuzed location api
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        getLastLocation()
+
 
         //reference viewmodel
         locationViewModel = ViewModelProviders.of(this).get(LocationViewModel::class.java)
 
 
-        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
 
 
         //sets start and stop button visibility
         start.setOnClickListener{
-            findViewById<Button>(R.id.start).visibility = View.GONE
-            findViewById<Button>(R.id.stop).visibility = View.VISIBLE
-            val newLocation = Location(
-                fromLatitude,
-                fromLongitude
-            )
-            //saving present location to room database
-            LocationDatabase.getInstance(it.context).LocationDao().insert(newLocation)
-            locationViewModel.setLocation(newLocation, this)
-            Toast.makeText(this, "location found", Toast.LENGTH_LONG).show()
-            Toast.makeText(this,"From set",Toast.LENGTH_SHORT).show()
+            if (checkPermissions()) {
+                if (isLocationEnabled()){
+
+                    getLastLocation()
+                    findViewById<Button>(R.id.start).visibility = View.GONE
+                    findViewById<Button>(R.id.stop).visibility = View.VISIBLE
+                    val newLocation = Location(
+                        fromLatitude,
+                        fromLongitude
+                    )
+                    //getting present location to room database
+                    //LocationDatabase.getInstance(it.context).LocationDao().insert(newLocation)
+                    locationViewModel.setLocation(newLocation, this)
+                    Toast.makeText(this, "location found", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this,"From set",Toast.LENGTH_SHORT).show()
+
+                    //saving present location
+                    locationViewModel.getLocation(this).observe(this, Observer<List<Location>> { location ->
+
+                        location?.let {
+                            startPosition = location
+                        }
+                    })
+                }else {
+                    Toast.makeText(this, "Turn on location", Toast.LENGTH_LONG).show()
+                    val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    startActivity(intent)
+                }
+            }else {
+                requestPermissions()
+            }
 
         }
 //
         stop.setOnClickListener {
+
+            getLastLocation()
            findViewById<Button>(R.id.start).visibility = View.VISIBLE
             findViewById<Button>(R.id.stop).visibility = View.GONE
             val newLocation = Location(
@@ -100,15 +125,19 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
                 toLongitude
             )
             //saving destination to romm database
-            LocationDatabase.getInstance(it.context).LocationDao().insert(newLocation)
+            //LocationDatabase.getInstance(it.context).LocationDao().insert(newLocation)
             locationViewModel.setLocation(newLocation, this)
             Toast.makeText(this, "location found", Toast.LENGTH_LONG).show()
             Toast.makeText(this,"To set",Toast.LENGTH_SHORT).show()
-            calculateDistance()
+            //calculateDistance()
 
         }
+
         buttonCalcDistance.setOnClickListener {
-            calculateDistance()
+           calculateDistance()
+//            mapFragment.getMapAsync(this)
+            getMap(startPosition[0].latitude, startPosition[0].longitude, fromLatitude, fromLongitude)
+
 
         }
 
@@ -116,24 +145,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
     }
     //onCreate Ends here
 
-    //Getting current location
-//    private fun getCurrentLocation(): ArrayList<Double> { //Creating a location object
-//        val location = LocationRequest()
-//        if (location != null) { //Getting longitude and latitude
-////            longitude = location.longitude
-////            latitude = location.latitude
-//            //moving the map to location
-//
-//            val newLocation = Location(
-//                longitude = location.longitude,
-//                latitude = location.latitude
-//            )
-//            locationViewModel.setLocation(newLocation, this)
-//            Toast.makeText(this, "location found", Toast.LENGTH_LONG).show()
-//        }
-//
-//        return arrayListOf(longitude, latitude)
-//    }
 
 
     @SuppressLint("MissingPermission")
@@ -186,6 +197,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
             latitude_textView.text = mLastLocation.latitude.toString()
             longitude_textView.text = mLastLocation.longitude.toString()
 
+
             fromLatitude = mLastLocation.latitude
             fromLongitude = mLastLocation.longitude
         }
@@ -222,19 +234,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
         }
     }
 
-    override fun onMapReady(googleMap: GoogleMap?) {
-        mMap = googleMap!!
-
-//        val latLng = LatLng(-7.5, 4.00)
-//        mMap.addMarker(MarkerOptions().position(latLng).draggable(true))
-//        mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng))
-
-        val latLngOrigin = LatLng(10.3181466, 123.9029382)
-        val latLngDestination = LatLng(10.311795,123.915864)
-
-
+    fun getMap(startLat:Double, startLong:Double, stopLat:Double, stopLong:Double){
         val path: MutableList<List<LatLng>> = ArrayList()
-        val urlDirections = "https://maps.googleapis.com/maps/api/directions/json?origin=10.3181466,123.9029382&destination=10.311795,123.915864&key=<AIzaSyBylAlQpXXhe1hhYfLyh9mEchn9loD5GkI>"
+        val urlDirections = "https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLong}&destination=${stopLat},${stopLong}&key=AIzaSyBylAlQpXXhe1hhYfLyh9mEchn9loD5GkI"
         val directionsRequest = object : StringRequest(Request.Method.GET, urlDirections, Response.Listener<String> {
                 response ->
             val jsonResponse = JSONObject(response)
@@ -242,6 +244,52 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
             val routes = jsonResponse.getJSONArray("routes")
             val legs = routes.getJSONObject(0).getJSONArray("legs")
             val steps = legs.getJSONObject(0).getJSONArray("steps")
+
+            val distance = steps.getJSONObject(0).getJSONObject("distance").getString("text")
+
+            Toast.makeText(this, "$distance Meters",Toast.LENGTH_SHORT).show()
+
+
+            for (i in 0 until steps.length()) {
+                val points = steps.getJSONObject(i).getJSONObject("polyline").getString("points")
+                path.add(PolyUtil.decode(points))
+            }
+            for (i in 0 until path.size) {
+                this.googleMap!!.addPolyline(PolylineOptions().addAll(path[i]).color(Color.RED))
+            }
+        }, Response.ErrorListener {
+                _ ->
+        }){}
+        val requestQueue = Volley.newRequestQueue(this)
+        requestQueue.add(directionsRequest)
+    }
+
+    override fun onMapReady(googleMap: GoogleMap?) {
+        this.googleMap = googleMap
+
+
+        val latLngOrigin = LatLng(3.5245918, 6.4383454)
+        val latLngDestination = LatLng(fromLatitude,fromLongitude)
+        this.googleMap!!.addMarker(MarkerOptions().position(latLngOrigin).title("Start"))
+        this.googleMap!!.addMarker(MarkerOptions().position(latLngDestination).title("Stop"))
+        this.googleMap!!.moveCamera(CameraUpdateFactory.newLatLngZoom(latLngOrigin, 14.5f))
+
+
+        val path: MutableList<List<LatLng>> = ArrayList()
+        val urlDirections = "https://maps.googleapis.com/maps/api/directions/json?origin=${startPosition[0].latitude},${startPosition[0].longitude}&destination=${fromLatitude},${fromLongitude}&key=AIzaSyBylAlQpXXhe1hhYfLyh9mEchn9loD5GkI"
+        val directionsRequest = object : StringRequest(Request.Method.GET, urlDirections, Response.Listener<String> {
+                response ->
+            val jsonResponse = JSONObject(response)
+            // Get routes
+            val routes = jsonResponse.getJSONArray("routes")
+            val legs = routes.getJSONObject(0).getJSONArray("legs")
+            val steps = legs.getJSONObject(0).getJSONArray("steps")
+
+            val distance = steps.getJSONObject(0).getJSONObject("distance").getString("text")
+
+            Toast.makeText(this, "$distance Meters",Toast.LENGTH_SHORT).show()
+
+
             for (i in 0 until steps.length()) {
                 val points = steps.getJSONObject(i).getJSONObject("polyline").getString("points")
                 path.add(PolyUtil.decode(points))
@@ -256,50 +304,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
         requestQueue.add(directionsRequest)
   }
 
-//    override fun onMove(googleMap: GoogleMap?){
-//        mFusedLocationClient.lastLocation.addOnCompleteListener(this) {task ->
-//            //                    var location: Location = task.result
-//            var location = task.result
-//            if (location == null) {
-//                requestNewLocationData()
-//            } else {
-//                latitude_textView.text = location.latitude.toString()
-//                longitude_textView.text = location.longitude.toString()
-//            }
-//
-//        }
-//
-//    }
 
-//    override fun onClick(v: View?) {
-//        if(v == start){
-//            findViewById<Button>(R.id.start).visibility = View.GONE
-//            findViewById<Button>(R.id.stop).visibility = View.VISIBLE
-//            fromLongitude = getCurrentLocation()[0]
-//            fromLatitude = getCurrentLocation()[1]
-//
-//            Toast.makeText(this,"From set",Toast.LENGTH_SHORT).show()
-//
-//        }
-//        if(v == stop){
-//
-//            findViewById<Button>(R.id.start).visibility = View.VISIBLE
-//            findViewById<Button>(R.id.stop).visibility = View.GONE
-//            toLongitude = getCurrentLocation()[0]
-//            toLatitude = getCurrentLocation()[1]
-//            Toast.makeText(this,"To set",Toast.LENGTH_SHORT).show()
-//            calculateDistance()
-//        }
-//
-//        if(v == buttonCalcDistance){
-//            //This method will show the distance
-//
-//            calculateDistance()
-//        }
-//
-//    }
-
-    //calculates the distance between the start and stop cordinates
+    //calculates the distance between the start and stop coordinates
     private fun calculateDistance(): Double {
         //get both coordinates
         var from = LatLng(fromLatitude, fromLongitude)
@@ -313,8 +319,10 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback{
 
         return distance
 
-
+        mapFragment.getMapAsync(this)
     }
+
+
 
 
 
